@@ -64,28 +64,51 @@ def log(msg):
     print(f"[{ts}] {msg}")
 
 def extract_cookie(raw: str):
-    """提取 Cookie，支持 Cookie-Editor 冒号格式"""
+    """提取并规范化 Cookie，支持 Header String、Cookie-Editor JSON 导出、冒号格式及标准格式"""
     if not raw:
         return None
     raw = raw.strip()
-    
-    # Cookie-Editor 格式 (koa:sess=xxx; koa:sess.sig=yyy)
-    if 'koa:sess=' in raw or 'koa:sess.sig=' in raw:
+
+    # 1. Cookie-Editor 导出的 JSON 数组格式: [{"name": "gld:sess", "value": "..."}, ...]
+    if raw.startswith('['):
+        try:
+            items = json.loads(raw)
+            if isinstance(items, list):
+                parts = [
+                    f"{item['name']}={item['value']}"
+                    for item in items
+                    if isinstance(item, dict) and 'name' in item and 'value' in item
+                ]
+                if parts:
+                    return "; ".join(parts)
+        except (json.JSONDecodeError, AttributeError):
+            pass
+        return None
+
+    # 2. Cookie 键值对格式 (支持 gld:sess 与 koa:sess)
+    if any(k in raw for k in ('gld:sess=', 'gld:sess.sig=', 'koa:sess=', 'koa:sess.sig=')):
         return raw
-        
-    # JSON
+
+    # 3. JSON 单对象 (例如 {"token": "..."} 或 {"gld:sess": "..."})
     if raw.startswith('{'):
         try:
-            token = json.loads(raw).get('token')
-            return f'koa:sess={token}' if token else None
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                token = data.get('token')
+                if token:
+                    return f'koa:sess={token}'
+                parts = [f"{k}={v}" for k, v in data.items() if isinstance(v, str)]
+                if parts:
+                    return "; ".join(parts)
         except (json.JSONDecodeError, AttributeError):
             return None
-        
-    # JWT Token
+        return None
+
+    # 4. 纯 JWT Token (默认补齐为 koa:sess)
     if raw.count('.') == 2 and '=' not in raw and len(raw) > 50:
         return 'koa:sess=' + raw
-        
-    # Standard
+
+    # 5. 标准格式
     return raw
 
 def get_cookies():
@@ -93,7 +116,37 @@ def get_cookies():
     if not raw:
         log("❌ 未配置 GLADOS_COOKIE")
         return []
-    
+    raw = raw.strip()
+
+    # 支持整体为 Cookie-Editor 导出的 JSON 数组（可能包含换行格式化内容）
+    if raw.startswith('['):
+        try:
+            data = json.loads(raw)
+            if isinstance(data, list) and len(data) > 0:
+                # 单账号 Cookie 数组: [{"name": "gld:sess", ...}, ...]
+                if isinstance(data[0], dict) and 'name' in data[0]:
+                    cookie = extract_cookie(raw)
+                    return [cookie] if cookie else []
+                # 多账号列表
+                accounts = []
+                for entry in data:
+                    if isinstance(entry, list):
+                        acc_cookie = "; ".join(
+                            f"{c['name']}={c['value']}"
+                            for c in entry
+                            if isinstance(c, dict) and 'name' in c and 'value' in c
+                        )
+                        if acc_cookie:
+                            accounts.append(acc_cookie)
+                    elif isinstance(entry, str):
+                        c = extract_cookie(entry)
+                        if c:
+                            accounts.append(c)
+                if accounts:
+                    return accounts
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
     # Split by enter or &
     sep = '\n' if '\n' in raw else '&'
     return [cookie for item in raw.split(sep) if (cookie := extract_cookie(item))]

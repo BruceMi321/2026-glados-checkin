@@ -248,7 +248,9 @@ GLaDOS 在 2026 年初进行了 API 更新，**绝大多数旧签到脚本已失
 
 ![Cookie-Editor 扩展](images/cookie-extension.png)
 
-> 💡 **提示**：以下任意一个扩展都可以使用，只要能显示 `koa:sess` 和 `koa:sess.sig` 这两个 Cookie 就行！
+> 💡 **提示**：不同用户/不同访问入口下的 Cookie 前缀可能为 `gld:sess` 或 `koa:sess`，**本项目均已原生支持**！
+> - 新版/当前常见格式：`gld:sess` 与 `gld:sess.sig`
+> - 历史/旧版常见格式：`koa:sess` 与 `koa:sess.sig`
 
 ![可选的 Cookie 扩展](images/cookie-alternative.png)
 
@@ -257,32 +259,37 @@ GLaDOS 在 2026 年初进行了 API 更新，**绝大多数旧签到脚本已失
 1. 打开 [https://glados.cloud](https://glados.cloud) 并登录
 2. 进入 **签到页面**（Console → Checkin）
 3. 点击浏览器右上角的 **Cookie-Editor** 扩展图标
-4. 找到并复制这两个值：
-   - `koa:sess` → 一串很长的字符串
-   - `koa:sess.sig` → 一串较短的字符串
+4. 找到并复制这两个值（根据你的页面显示选择）：
+   - `gld:sess`（或 `koa:sess`）→ 一串很长的字符串
+   - `gld:sess.sig`（或 `koa:sess.sig`）→ 一串较短的字符串
 
 ![获取 Cookie](images/glados-cookies.png)
 
-#### 2.3 组合 Cookie（重要！）
+#### 2.3 组合 Cookie（任选一种快捷方式）
 
-将两个值按以下格式组合，**注意格式必须完全正确**：
+**方式一：手动组合（推荐）**
 
+将两个值按以下格式组合（以你看到的键名为准，`gld:sess` 或 `koa:sess` 均可）：
+
+```text
+gld:sess=你的长字符串; gld:sess.sig=你的短字符串
+```
+或
 ```text
 koa:sess=你的长字符串; koa:sess.sig=你的短字符串
 ```
 
-**正确示例**：
-
-```text
-koa:sess=eyJ1c2VySWQiOjEyMzQ1Njc4OTB9; koa:sess.sig=abcdef123456
-```
+**方式二：使用 Cookie-Editor 一键导出**
+- 点击 Cookie-Editor 底部的 **Export** 按钮：
+  - **Export as Header String**（推荐）：直接获得组合好的 Header 字符串。
+  - **Export as JSON**（也支持）：直接复制导出的 JSON 数组内容粘贴到 Secret 中，脚本会自动解析。
 
 **常见错误**：
 
 - ❌ 缺少分号 `;`
 - ❌ 缺少空格（分号后需要一个空格）
-- ❌ 值两边多了引号
-- ❌ 复制了多余的空格或换行
+- ❌ 值两边多了多余引号
+- ❌ 复制了多余首尾空格
 
 #### 2.4 验证你的 Cookie 格式
 
@@ -290,12 +297,13 @@ koa:sess=eyJ1c2VySWQiOjEyMzQ1Njc4OTB9; koa:sess.sig=abcdef123456
 
 ```python
 # 将你的 Cookie 粘贴到下面的引号中
-cookie = "koa:sess=你的长字符串; koa:sess.sig=你的短字符串"
+cookie = "gld:sess=你的长字符串; gld:sess.sig=你的短字符串"
 
 # 验证
-if "koa:sess=" in cookie and "koa:sess.sig=" in cookie and "; " in cookie:
+prefix = "gld:sess" if "gld:sess=" in cookie else "koa:sess"
+if f"{prefix}=" in cookie and f"{prefix}.sig=" in cookie and "; " in cookie:
     parts = cookie.split("; ")
-    if len(parts) == 2 and parts[0].startswith("koa:sess=") and parts[1].startswith("koa:sess.sig="):
+    if len(parts) >= 2 and any(p.startswith(f"{prefix}=") for p in parts) and any(p.startswith(f"{prefix}.sig=") for p in parts):
         print("✅ Cookie 格式正确！")
     else:
         print("❌ 格式错误，请检查分号和空格")

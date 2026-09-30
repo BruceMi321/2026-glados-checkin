@@ -54,6 +54,48 @@ class CookieTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(checkin.get_cookies(), [])
 
+    def test_gld_sess_header_string(self):
+        cookie = 'gld:sess=abc12345; gld:sess.sig=sig999'
+        self.assertEqual(checkin.extract_cookie(cookie), cookie)
+
+    def test_cookie_editor_json_array_gld_sess(self):
+        json_raw = '[{"name":"gld:sess","value":"abc12345"},{"name":"gld:sess.sig","value":"sig999"}]'
+        self.assertEqual(
+            checkin.extract_cookie(json_raw),
+            'gld:sess=abc12345; gld:sess.sig=sig999'
+        )
+
+    def test_cookie_editor_json_array_koa_sess(self):
+        json_raw = '[{"name":"koa:sess","value":"token123"},{"name":"koa:sess.sig","value":"sig456"}]'
+        self.assertEqual(
+            checkin.extract_cookie(json_raw),
+            'koa:sess=token123; koa:sess.sig=sig456'
+        )
+
+    def test_get_cookies_multiline_json_array(self):
+        multiline_json = """[
+            {
+                "name": "gld:sess",
+                "value": "long_token_value"
+            },
+            {
+                "name": "gld:sess.sig",
+                "value": "sig_value"
+            }
+        ]"""
+        with mock.patch.dict(os.environ, {'GLADOS_COOKIE': multiline_json}):
+            cookies = checkin.get_cookies()
+            self.assertEqual(len(cookies), 1)
+            self.assertEqual(cookies[0], 'gld:sess=long_token_value; gld:sess.sig=sig_value')
+
+    def test_get_cookies_multiple_accounts_mixed(self):
+        env_val = "gld:sess=user1; gld:sess.sig=sig1\nkoa:sess=user2; koa:sess.sig=sig2"
+        with mock.patch.dict(os.environ, {'GLADOS_COOKIE': env_val}):
+            cookies = checkin.get_cookies()
+            self.assertEqual(len(cookies), 2)
+            self.assertEqual(cookies[0], 'gld:sess=user1; gld:sess.sig=sig1')
+            self.assertEqual(cookies[1], 'koa:sess=user2; koa:sess.sig=sig2')
+
 
 class FakeGLaDOS:
     def __init__(self, points, exchange_response):
